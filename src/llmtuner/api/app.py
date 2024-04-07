@@ -84,7 +84,15 @@ def create_app(chat_model: "ChatModel") -> "FastAPI":
     async def list_models():
         model_card = ModelCard(id="gpt-3.5-turbo")
         return ModelList(data=[model_card])
-
+        
+    async def publish_events(event_source: EventSourceResponse):
+        # 创建EventSourceResponse实例
+        # event_source = EventSourceResponse()
+        # 监听连接断开事件
+        await event_source.listen_for_exit_signal()
+        # 连接断开时执行清理操作
+        print("=======================EventSource connection listen_for_exit_signal closed")
+        
     @app.post("/v1/chat/completions", response_model=ChatCompletionResponse, status_code=status.HTTP_200_OK)
     async def create_chat_completion(request: ChatCompletionRequest):
         if not chat_model.engine.can_generate:
@@ -125,6 +133,10 @@ def create_app(chat_model: "ChatModel") -> "FastAPI":
 
             generate = stream_chat_completion(input_messages, system, tools, request)
             return EventSourceResponse(generate, media_type="text/event-stream")
+            # eSResponse = EventSourceResponse(generate, media_type="text/event-stream")
+            # publish_events(eSResponse)
+            # return eSResponse
+            
 
         responses = await chat_model.achat(
             input_messages,
@@ -194,12 +206,14 @@ def create_app(chat_model: "ChatModel") -> "FastAPI":
             choice_data = ChatCompletionResponseStreamChoice(
                 index=0, delta=ChatCompletionMessage(content=new_token), finish_reason=None
             )
+            print("-------------choice_data is {}".format(choice_data))
             chunk = ChatCompletionStreamResponse(model=request.model, choices=[choice_data])
             yield jsonify(chunk)
 
         choice_data = ChatCompletionResponseStreamChoice(
             index=0, delta=ChatCompletionMessage(), finish_reason=Finish.STOP
         )
+        print("-------------choice_data is {}".format(choice_data))
         chunk = ChatCompletionStreamResponse(model=request.model, choices=[choice_data])
         yield jsonify(chunk)
         yield "[DONE]"
